@@ -444,4 +444,76 @@ for(const m of D.metrics){if(!isReverseMetric(m))continue;const heading=inputs.g
 syncPercentageDisplay();queueMetricSizes();
 // END REPORT_PERCENTAGE_UI
 
-</script></html>
+</script>
+
+<!-- BEGIN FIXED_PRINT -->
+<style>/* Two physical A4 sheets, measured using the active browser's print fonts. */
+.report-print-pages{display:none}
+@media print{
+ @page{size:A4 portrait;margin:7mm 9mm}
+ body{margin:0!important;padding:0!important}
+ body.report-fixed-print>main{display:none!important}
+ .report-print-pages{display:block!important;margin:0!important;padding:0!important}
+ .report-print-sheet{position:relative;width:192mm;height:276mm;margin:0!important;padding:0!important;break-inside:avoid;page-break-inside:avoid;break-after:page;page-break-after:always}
+ .report-print-sheet:last-child{break-after:auto;page-break-after:auto}
+ .report-print-sheet>main{display:block!important;position:absolute;left:0;top:0;width:192mm!important;max-width:none!important;margin:0!important;padding:0!important;border:0!important;transform-origin:top left;box-sizing:border-box;zoom:1!important}
+ .report-print-pages [hidden]{display:none!important}
+ .report-print-pages,.report-print-pages input,.report-print-pages textarea{font-family:"Microsoft YaHei","PingFang SC","Noto Sans CJK SC","Heiti SC",Arial,sans-serif}
+ .report-print-remark{white-space:pre-wrap;font-size:7pt;line-height:1.3;margin:3px 0}
+}
+</style>
+<script>(()=>{
+ let printRoot=null;
+ function clearPrintSheets(){printRoot?.remove();printRoot=null;document.body.classList.remove('report-fixed-print')}
+ function preparePrintSheets(){
+  clearPrintSheets();
+  const source=document.querySelector('body>main');if(!source)return;
+  const sourceTasks=[...source.querySelector('#tasks').children].filter(n=>n.tagName==='SECTION');
+  if(sourceTasks.length<2)return;
+  printRoot=document.createElement('div');printRoot.className='report-print-pages';printRoot.setAttribute('aria-hidden','true');
+  const copies=[];
+  for(let page=0;page<2;page++){
+   const sheet=document.createElement('div');sheet.className='report-print-sheet';
+   const copy=source.cloneNode(true);
+   const originals=source.querySelectorAll('input,textarea,select'),fields=copy.querySelectorAll('input,textarea,select');
+   originals.forEach((n,i)=>{if(n.type!=='file')fields[i].value=n.value});
+   copy.querySelectorAll('details').forEach(d=>d.open=true);
+   copy.querySelectorAll('.toolbar,nav,#importPanel').forEach(n=>n.remove());
+   const remarks=copy.querySelector('.remarks'),raw=remarks?.querySelector('textarea');
+   if(raw?.value.trim()){const text=document.createElement('p');text.className='report-print-remark';text.textContent=raw.value;raw.parentElement.replaceWith(text)}else remarks?.remove();
+   if(page===0){copy.querySelector('.remarks')?.remove();copy.querySelector('.footer')?.remove()}
+   else [...copy.children].forEach(n=>{if(n.id!=='tasks'&&!n.matches('.remarks,.footer'))n.remove()});
+   sheet.append(copy);printRoot.append(sheet);copies.push({sheet,copy,tasks:[...copy.querySelector('#tasks').children].filter(n=>n.tagName==='SECTION')});
+  }
+  // Some print engines fire beforeprint before activating print media.
+  // Apply the same print rules while measuring, so screen dimensions cannot leak in.
+  const printStyle=document.createElement('style');
+  const printRules=[];
+  for(const sheet of document.styleSheets){try{for(const rule of sheet.cssRules){if(rule.type===4&&/\bprint\b/.test(rule.conditionText))printRules.push(...[...rule.cssRules].map(r=>r.cssText))}}catch{}}
+  printStyle.textContent=printRules.join('\n');printRoot.prepend(printStyle);
+  document.body.append(printRoot);document.body.classList.add('report-fixed-print');
+  function splitAt(split){copies.forEach(({tasks},page)=>tasks.forEach((n,i)=>n.hidden=page===0?i>=split:i<split))}
+  // Keep every task intact and choose the split needing the least shrinking.
+  let best=1,bestScale=-1;
+  for(let split=1;split<sourceTasks.length;split++){
+   splitAt(split);
+   const scale=Math.min(...copies.map(({sheet,copy})=>Math.min(1,(sheet.clientHeight-4)/copy.getBoundingClientRect().height)));
+   if(scale>bestScale){best=split;bestScale=scale}
+  }
+  splitAt(best);
+  copies.forEach(({sheet,copy})=>{
+   const height=copy.getBoundingClientRect().height;
+   const scale=Math.min(1,(sheet.clientHeight-4)/height);
+   copy.style.transform=`scale(${scale})`;
+   copy.style.left=((sheet.clientWidth-copy.getBoundingClientRect().width)/2)+'px';
+   sheet.dataset.printScale=scale.toFixed(4);
+  });
+ }
+ window.addEventListener('beforeprint',preparePrintSheets);
+ window.addEventListener('afterprint',clearPrintSheets);
+ const printReady=async()=>{await document.fonts.ready;window.print()};
+ document.getElementById('pdf').onclick=printReady;document.getElementById('print').onclick=printReady;
+})();
+</script>
+<!-- END FIXED_PRINT -->
+</html>
